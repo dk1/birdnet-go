@@ -19,6 +19,7 @@ spectrograms/
 .task/*
 .vscode/*
 .mcp.json
+birdnet-go.json
 .claude/settings.local.json
 .claude/worktrees/
 .claude/scheduled_tasks.lock
