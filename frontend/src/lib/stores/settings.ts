@@ -522,6 +522,14 @@ export interface SpeciesTrackingSettings {
   seasonalTracking: SeasonalTrackingSettings;
 }
 
+// Life list settings: a real-world life list (e.g. imported from eBird),
+// used to distinguish a genuine "lifer" (species never seen anywhere) from
+// speciesTracking's per-install "new species" concept.
+export interface LifeListSettings {
+  enabled: boolean;
+  species: string[]; // "Scientific name_Common name" entries, same convention as SpeciesSettings.include
+}
+
 // Extended capture settings
 export interface ExtendedCaptureSettings {
   enabled: boolean;
@@ -562,6 +570,7 @@ export interface RealtimeSettings {
   species?: SpeciesSettings;
   weather?: WeatherSettings;
   speciesTracking?: SpeciesTrackingSettings;
+  lifeList?: LifeListSettings;
   extendedCapture?: ExtendedCaptureSettings;
   ebird?: EBirdSettings;
 }
@@ -1206,6 +1215,12 @@ export const dynamicThresholdSettings = derived(
 export const speciesTrackingSettings = derived(
   settingsStore,
   $store => $store.formData.realtime?.speciesTracking
+);
+
+// Life list settings derived store
+export const lifeListSettings = derived(
+  settingsStore,
+  $store => $store.formData.realtime?.lifeList
 );
 
 // Extended capture settings derived store

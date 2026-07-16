@@ -39,6 +39,7 @@
     speciesSettings,
     realtimeSettings,
     speciesTrackingSettings,
+    lifeListSettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import type { SpeciesConfig, SpeciesSettings } from '$lib/stores/settings';
@@ -51,6 +52,7 @@
   import SpeciesListCard from '$lib/desktop/features/settings/components/SpeciesListCard.svelte';
   import SpeciesConfigEditor from '$lib/desktop/features/settings/components/SpeciesConfigEditor.svelte';
   import SpeciesConfigTable from '$lib/desktop/features/settings/components/SpeciesConfigTable.svelte';
+  import LifeListImportField from '$lib/desktop/features/settings/components/LifeListImportField.svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { safeGet } from '$lib/utils/security';
@@ -84,6 +86,7 @@
     CalendarClock,
     Activity,
     TriangleAlert,
+    Star,
   } from '@lucide/svelte';
   import { toastActions } from '$lib/stores/toast';
 
@@ -399,6 +402,10 @@
     )
   );
 
+  let lifeListHasChanges = $derived(
+    hasSettingsChanged(store.originalData.realtime?.lifeList, store.formData.realtime?.lifeList)
+  );
+
   let synonymsHasChanges = $derived(
     hasSettingsChanged(store.originalData.taxonomySynonyms, store.formData.taxonomySynonyms)
   );
@@ -416,6 +423,53 @@
 
   // Tracking settings state
   let trackingSettings = $derived($speciesTrackingSettings);
+
+  // Life list settings state
+  let lifeList = $derived($lifeListSettings ?? { enabled: false, species: [] as string[] });
+
+  function setLifeListEnabled(enabled: boolean) {
+    settingsActions.updateSection('realtime', {
+      ...$realtimeSettings,
+      lifeList: { ...lifeList, enabled },
+    });
+  }
+
+  function updateLifeListSpecies(updatedSpecies: string[]) {
+    settingsActions.updateSection('realtime', {
+      ...$realtimeSettings,
+      lifeList: { ...lifeList, species: updatedSpecies },
+    });
+  }
+
+  function addLifeListSpecies(entry: string) {
+    const trimmed = entry.trim();
+    if (!trimmed) return;
+    if (lifeList.species.some(s => s.toLowerCase() === trimmed.toLowerCase())) {
+      toastActions.error(t('settings.species.lifeList.duplicateEntry'));
+      return;
+    }
+    updateLifeListSpecies([...lifeList.species, trimmed]);
+  }
+
+  function removeLifeListSpecies(entry: string) {
+    updateLifeListSpecies(lifeList.species.filter(s => s !== entry));
+  }
+
+  // Merges newly-parsed CSV entries into the existing life list. The CSV-level
+  // "N of M rows imported" summary is already shown by LifeListImportField
+  // itself, so this deliberately does not fire a second toast.
+  function importLifeListSpecies(entries: string[]) {
+    const existing = new Set(lifeList.species.map(s => s.toLowerCase()));
+    const merged = [...lifeList.species];
+    for (const entry of entries) {
+      const key = entry.toLowerCase();
+      if (!existing.has(key)) {
+        existing.add(key);
+        merged.push(entry);
+      }
+    }
+    updateLifeListSpecies(merged);
+  }
 
   // Month options for dropdown menus (derived once, used multiple times)
   let monthOptions = $derived(
@@ -1223,6 +1277,13 @@
       hasChanges: trackingHasChanges,
     },
     {
+      id: 'lifeList',
+      label: t('settings.species.lifeList.tabLabel'),
+      icon: Star,
+      content: lifeListTabContent,
+      hasChanges: lifeListHasChanges,
+    },
+    {
       id: 'dynamicThreshold',
       label: t('settings.species.dynamicThreshold.tabLabel'),
       icon: Activity,
@@ -1985,6 +2046,38 @@
         </div>
       </SettingsSection>
     {/if}
+  </div>
+{/snippet}
+
+<!-- Life List Tab Content -->
+{#snippet lifeListTabContent()}
+  <div class="space-y-6">
+    <SettingsSection
+      title={t('settings.species.lifeList.title')}
+      description={t('settings.species.lifeList.description')}
+      defaultOpen={true}
+      originalData={store.originalData.realtime?.lifeList}
+      currentData={store.formData.realtime?.lifeList}
+    >
+      <div class="space-y-4">
+        <Checkbox
+          checked={lifeList.enabled}
+          label={t('settings.species.lifeList.enableLabel')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={setLifeListEnabled}
+        />
+
+        {#if lifeList.enabled}
+          <LifeListImportField
+            species={lifeList.species}
+            disabled={store.isLoading || store.isSaving}
+            onImport={importLifeListSpecies}
+            onAdd={addLifeListSpecies}
+            onRemove={removeLifeListSpecies}
+          />
+        {/if}
+      </div>
+    </SettingsSection>
   </div>
 {/snippet}
 

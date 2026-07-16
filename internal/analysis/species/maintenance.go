@@ -185,15 +185,19 @@ func (t *SpeciesTracker) PruneOldEntries() int {
 
 	// Also cleanup old notification records (only if suppression is enabled)
 	if t.notificationSuppressionWindow > 0 {
-		pruned += t.cleanupOldNotificationRecordsLocked(now)
+		pruned += t.cleanupOldNotificationRecordsLocked(t.notificationLastSent, now)
+		pruned += t.cleanupOldNotificationRecordsLocked(t.liferNotificationLastSent, now)
 	}
 
 	return pruned
 }
 
-// cleanupOldNotificationRecordsLocked is an internal version that assumes lock is already held
-func (t *SpeciesTracker) cleanupOldNotificationRecordsLocked(currentTime time.Time) int {
-	if t.notificationLastSent == nil || t.notificationSuppressionWindow <= 0 {
+// cleanupOldNotificationRecordsLocked is an internal version that assumes lock
+// is already held. Shared by notificationLastSent and
+// liferNotificationLastSent, which use the same suppression window but are
+// independent maps (see liferNotificationLastSent's doc comment).
+func (t *SpeciesTracker) cleanupOldNotificationRecordsLocked(m map[string]time.Time, currentTime time.Time) int {
+	if m == nil || t.notificationSuppressionWindow <= 0 {
 		return 0
 	}
 
@@ -202,9 +206,9 @@ func (t *SpeciesTracker) cleanupOldNotificationRecordsLocked(currentTime time.Ti
 	// Once the suppression window has passed, we can notify again, so no need to keep the record
 	cutoffTime := currentTime.Add(-t.notificationSuppressionWindow)
 
-	for species, sentTime := range t.notificationLastSent {
+	for species, sentTime := range m {
 		if sentTime.Before(cutoffTime) {
-			delete(t.notificationLastSent, species)
+			delete(m, species)
 			cleaned++
 		}
 	}
@@ -303,6 +307,101 @@ func (t *SpeciesTracker) RecordNotificationSent(scientificName string, sentTime 
 	}
 }
 
+// ShouldSuppressLiferNotification checks if a lifer notification for this
+// species should be suppressed based on when the last lifer notification was
+// sent for it. Structural sibling of ShouldSuppressNotification, operating on
+// liferNotificationLastSent instead of notificationLastSent — see that
+// field's doc comment for why they are independent maps.
+func (t *SpeciesTracker) ShouldSuppressLiferNotification(scientificName string, currentTime time.Time) bool {
+	scientificName = canonicalSpeciesName(scientificName)
+	t.mu.RLock()
+	lastSent, exists := t.liferNotificationLastSent[scientificName]
+	window := t.notificationSuppressionWindow
+	t.mu.RUnlock()
+
+	if !exists {
+		return false // Never sent, don't suppress
+	}
+	if window <= 0 {
+		return false // Suppression disabled
+	}
+
+	suppressUntil := lastSent.Add(window)
+	shouldSuppress := currentTime.Before(suppressUntil)
+
+	if shouldSuppress {
+		getLog().Debug("Suppressing duplicate lifer notification",
+			logger.String("species", scientificName),
+			logger.Time("suppress_until", suppressUntil),
+			logger.Duration("suppression_window", window))
+	}
+	return shouldSuppress
+}
+
+// RecordLiferNotificationSent records that a lifer notification was sent for
+// a species. Structural sibling of RecordNotificationSent — see
+// liferNotificationLastSent's doc comment for why this is a separate map and
+// database notification type rather than reusing the new-species one.
+func (t *SpeciesTracker) RecordLiferNotificationSent(scientificName string, sentTime time.Time) {
+	// Early return when suppression is disabled to avoid unnecessary operations
+	if t.notificationSuppressionWindow <= 0 {
+		return
+	}
+
+	// Record and persist under the canonical name so suppression survives a restart
+	// and matches a later detection under either the legacy or canonical name.
+	scientificName = canonicalSpeciesName(scientificName)
+
+	t.mu.Lock()
+	// Initialize map if needed
+	if t.liferNotificationLastSent == nil {
+		t.liferNotificationLastSent = make(map[string]time.Time, initialSpeciesCapacity)
+	}
+
+	// Record the notification time
+	t.liferNotificationLastSent[scientificName] = sentTime
+	t.mu.Unlock()
+
+	// Log outside the critical section to reduce lock contention
+	getLog().Debug("Recorded lifer notification sent",
+		logger.String("species", scientificName),
+		logger.String("sent_time", sentTime.Format(time.DateTime)))
+
+	// Persist to database asynchronously to avoid blocking (mirrors
+	// RecordNotificationSent's BG-17 fix). The write runs under a bounded
+	// context so a stuck SQLite write cannot leak this goroutine; in-memory
+	// suppression still works if the persist fails.
+	if t.ds != nil {
+		t.asyncOpsWg.Go(func() {
+			ctx, cancel := context.WithTimeout(context.Background(), notificationPersistTimeout)
+			defer cancel()
+
+			// ExpiresAt = when the suppression ends (sentTime + suppressionWindow)
+			expiresAt := sentTime.Add(t.notificationSuppressionWindow)
+			history := &datastore.NotificationHistory{
+				ScientificName:   scientificName,
+				NotificationType: notificationTypeLifer,
+				LastSent:         sentTime,
+				ExpiresAt:        expiresAt,
+				CreatedAt:        sentTime,
+				UpdatedAt:        sentTime,
+			}
+
+			if err := t.ds.SaveNotificationHistory(ctx, history); err != nil {
+				getLog().Error("Failed to save lifer notification history to database",
+					logger.String("species", scientificName),
+					logger.Error(err),
+					logger.String("operation", "save_lifer_notification_history"))
+				// Don't crash - in-memory suppression still works
+			} else {
+				getLog().Debug("Persisted lifer notification history to database",
+					logger.String("species", scientificName),
+					logger.String("expires_at", expiresAt.Format(time.DateTime)))
+			}
+		})
+	}
+}
+
 // CleanupOldNotificationRecords removes notification records older than the suppression window
 // to prevent unbounded memory growth.
 // BG-17 fix: Also cleans up expired records from database
@@ -314,7 +413,8 @@ func (t *SpeciesTracker) CleanupOldNotificationRecords(currentTime time.Time) in
 
 	// Clean up in-memory records (removes entries older than currentTime - suppressionWindow)
 	t.mu.Lock()
-	cleaned := t.cleanupOldNotificationRecordsLocked(currentTime)
+	cleaned := t.cleanupOldNotificationRecordsLocked(t.notificationLastSent, currentTime)
+	cleaned += t.cleanupOldNotificationRecordsLocked(t.liferNotificationLastSent, currentTime)
 	t.mu.Unlock()
 
 	if cleaned > 0 {

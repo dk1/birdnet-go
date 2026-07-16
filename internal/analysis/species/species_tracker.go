@@ -70,6 +70,7 @@ const (
 	// Notification suppression
 	defaultNotificationSuppressionWindow = 168 * time.Hour // Default suppression window (7 days)
 	notificationTypeNewSpecies           = "new_species"   // Notification type for new species alerts
+	notificationTypeLifer                = "lifer"         // Notification type for lifer (not on the user's imported life list) alerts
 
 	// Novelty episode tracking
 	firstEverNoveltyEpisodeDays = 36500 // Treat first-ever detections as a very large absence (~100 years)
@@ -100,6 +101,11 @@ type SpeciesDatastore interface {
 	GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error)
 	// Notification history methods for BG-17 fix
 	GetActiveNotificationHistory(ctx context.Context, after time.Time) ([]datastore.NotificationHistory, error)
+	// GetActiveNotificationHistoryByType loads suppression state for a single
+	// notification type on restart. Used for "lifer" so it warms up
+	// independently of the "new_species" notifications loaded via
+	// GetActiveNotificationHistory (see liferNotificationLastSent).
+	GetActiveNotificationHistoryByType(ctx context.Context, notificationType string, after time.Time) ([]datastore.NotificationHistory, error)
 	SaveNotificationHistory(ctx context.Context, history *datastore.NotificationHistory) error
 	DeleteExpiredNotificationHistory(ctx context.Context, before time.Time) (int64, error)
 }
@@ -199,6 +205,15 @@ type SpeciesTracker struct {
 	notificationLastSent          map[string]time.Time
 	notificationSuppressionWindow time.Duration // Duration to suppress duplicate notifications (default: 7 days)
 
+	// Lifer notification suppression: a structural sibling of
+	// notificationLastSent, not the same map. A "new_species" notification
+	// and a "lifer" notification for the same scientific name are
+	// independent events (a species can be new to this install but not a
+	// lifer, or vice versa once a life list is uploaded), so they must not
+	// share one suppression timer. Reuses notificationSuppressionWindow —
+	// no separate configuration.
+	liferNotificationLastSent map[string]time.Time
+
 	// Cached season order for performance optimization (built once at initialization)
 	// This avoids rebuilding the season order on every computeCurrentSeason() call
 	cachedSeasonOrder []string
@@ -284,7 +299,8 @@ func NewTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTrackingS
 		seasonCacheTTL: defaultSeasonCacheTTL, // TTL for season cache
 
 		// Notification suppression tracking
-		notificationLastSent: make(map[string]time.Time, initialSpeciesCapacity),
+		notificationLastSent:      make(map[string]time.Time, initialSpeciesCapacity),
+		liferNotificationLastSent: make(map[string]time.Time, initialSpeciesCapacity),
 	}
 
 	// Initialize seasons from configuration

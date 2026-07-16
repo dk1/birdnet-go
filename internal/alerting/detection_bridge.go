@@ -11,6 +11,7 @@ var detectionMetadataProperties = []string{
 	PropertyDaysSinceLastSeen,
 	PropertyNoveltyEpisodeDays,
 	PropertyNoveltyEpisodeStart,
+	PropertyIsLifer,
 }
 
 // DetectionAlertBridge bridges the events.EventBus detection events to the
@@ -63,7 +64,8 @@ func (b *DetectionAlertBridge) ProcessDetectionEvent(event events.DetectionEvent
 		PropertyIsNewSpecies:       event.IsNewSpecies(),
 	}
 
-	if meta := event.GetMetadata(); len(meta) > 0 {
+	meta := event.GetMetadata()
+	if len(meta) > 0 {
 		properties[PropertyEventMetadata] = maps.Clone(meta)
 		for _, propertyName := range detectionMetadataProperties {
 			if value, ok := meta[propertyName]; ok {
@@ -75,6 +77,12 @@ func (b *DetectionAlertBridge) ProcessDetectionEvent(event events.DetectionEvent
 	var newSpeciesProps map[string]any
 	if event.IsNewSpecies() {
 		newSpeciesProps = maps.Clone(properties)
+	}
+
+	isLifer, _ := meta[events.DetectionMetadataIsLifer].(bool)
+	var liferProps map[string]any
+	if isLifer {
+		liferProps = maps.Clone(properties)
 	}
 
 	TryPublish(&AlertEvent{
@@ -89,6 +97,15 @@ func (b *DetectionAlertBridge) ProcessDetectionEvent(event events.DetectionEvent
 			ObjectType: ObjectTypeDetection,
 			EventName:  EventDetectionNewSpecies,
 			Properties: newSpeciesProps,
+			Timestamp:  event.GetTimestamp(),
+		})
+	}
+
+	if liferProps != nil {
+		TryPublish(&AlertEvent{
+			ObjectType: ObjectTypeDetection,
+			EventName:  EventDetectionLifer,
+			Properties: liferProps,
 			Timestamp:  event.GetTimestamp(),
 		})
 	}

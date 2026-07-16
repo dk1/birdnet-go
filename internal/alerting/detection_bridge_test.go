@@ -120,6 +120,61 @@ func TestBridge_NewSpecies_EmitsBothEvents(t *testing.T) {
 	}
 }
 
+func TestBridge_Lifer_EmitsBothEvents(t *testing.T) {
+	bridge, mu, captured := setupBridgeWithCapture(t)
+
+	event, err := events.NewDetectionEvent("Test Bird", "Testus birdus", 0.9, "mic", false, 30)
+	require.NoError(t, err)
+	event.GetMetadata()[events.DetectionMetadataIsLifer] = true
+
+	require.NoError(t, bridge.ProcessDetectionEvent(event))
+
+	result := waitForEvents(t, mu, captured, 2)
+	assert.Len(t, result, 2)
+
+	eventNames := []string{result[0].EventName, result[1].EventName}
+	assert.Contains(t, eventNames, EventDetectionOccurred)
+	assert.Contains(t, eventNames, EventDetectionLifer)
+
+	for _, r := range result {
+		assert.Equal(t, "Test Bird", r.Properties[PropertySpeciesName])
+		assert.Equal(t, true, r.Properties[PropertyIsLifer])
+	}
+}
+
+func TestBridge_NotLifer_EmitsOccurredOnly(t *testing.T) {
+	bridge, mu, captured := setupBridgeWithCapture(t)
+
+	event, err := events.NewDetectionEvent("Test Bird", "Testus birdus", 0.9, "mic", false, 30)
+	require.NoError(t, err)
+	// is_lifer metadata deliberately absent, matching the "set only when
+	// true" convention.
+
+	require.NoError(t, bridge.ProcessDetectionEvent(event))
+
+	result := waitForEvents(t, mu, captured, 1)
+	assert.Len(t, result, 1)
+	assert.Equal(t, EventDetectionOccurred, result[0].EventName)
+}
+
+func TestBridge_NewSpeciesAndLifer_EmitsAllThreeEvents(t *testing.T) {
+	bridge, mu, captured := setupBridgeWithCapture(t)
+
+	event, err := events.NewDetectionEvent("Test Bird", "Testus birdus", 0.9, "mic", true, 0)
+	require.NoError(t, err)
+	event.GetMetadata()[events.DetectionMetadataIsLifer] = true
+
+	require.NoError(t, bridge.ProcessDetectionEvent(event))
+
+	result := waitForEvents(t, mu, captured, 3)
+	assert.Len(t, result, 3)
+
+	eventNames := []string{result[0].EventName, result[1].EventName, result[2].EventName}
+	assert.Contains(t, eventNames, EventDetectionOccurred)
+	assert.Contains(t, eventNames, EventDetectionNewSpecies)
+	assert.Contains(t, eventNames, EventDetectionLifer)
+}
+
 func TestBridge_NewSpecies_IndependentPropertyMaps(t *testing.T) {
 	bridge, mu, captured := setupBridgeWithCapture(t)
 
