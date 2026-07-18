@@ -370,9 +370,10 @@ type NotificationConfig struct {
 // NotificationTemplates contains customizable notification message templates.
 type NotificationTemplates struct {
 	NewSpecies NewSpeciesTemplate `json:"newSpecies" yaml:"newspecies"`
+	Lifer      NewSpeciesTemplate `json:"lifer" yaml:"lifer"`
 }
 
-// NewSpeciesTemplate contains templates for new species detection notifications.
+// NewSpeciesTemplate contains templates for new species (or lifer) detection notifications.
 type NewSpeciesTemplate struct {
 	Title   string `json:"title" yaml:"title"`
 	Message string `json:"message" yaml:"message"`

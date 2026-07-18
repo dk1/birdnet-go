@@ -274,13 +274,10 @@ func validDetectionProps() map[string]any {
 }
 
 func TestRenderDetectionTemplates_WithConfiguredTemplates(t *testing.T) {
-	settings := conftest.GetTestSettings()
-	settings.Notification.Templates.NewSpecies.Title = "New: {{.CommonName}}"
-	settings.Notification.Templates.NewSpecies.Message = "{{.CommonName}} ({{.ScientificName}}) at {{.ConfidencePercent}}%"
-	conftest.SetTestSettings(settings)
-	t.Cleanup(func() { conftest.SetTestSettings(nil) })
-
-	title, message := renderDetectionTemplates(validDetectionProps())
+	title, message := renderDetectionTemplates(validDetectionProps(),
+		"New: {{.CommonName}}",
+		"{{.CommonName}} ({{.ScientificName}}) at {{.ConfidencePercent}}%",
+	)
 	assert.Equal(t, "New: Eurasian Blue Tit", title)
 	assert.Contains(t, message, "Eurasian Blue Tit")
 	assert.Contains(t, message, "Cyanistes caeruleus")
@@ -288,33 +285,57 @@ func TestRenderDetectionTemplates_WithConfiguredTemplates(t *testing.T) {
 }
 
 func TestRenderDetectionTemplates_EmptyTemplates(t *testing.T) {
-	settings := conftest.GetTestSettings()
-	conftest.SetTestSettings(settings)
-	t.Cleanup(func() { conftest.SetTestSettings(nil) })
-
-	title, message := renderDetectionTemplates(validDetectionProps())
-	assert.Empty(t, title)
-	assert.Empty(t, message)
-}
-
-func TestRenderDetectionTemplates_NilSettings(t *testing.T) {
-	conftest.SetTestSettings(nil)
-	t.Cleanup(func() { conftest.SetTestSettings(nil) })
-
-	title, message := renderDetectionTemplates(validDetectionProps())
+	title, message := renderDetectionTemplates(validDetectionProps(), "", "")
 	assert.Empty(t, title)
 	assert.Empty(t, message)
 }
 
 func TestRenderDetectionTemplates_TitleOnlyTemplate(t *testing.T) {
+	title, message := renderDetectionTemplates(validDetectionProps(), "Spotted: {{.CommonName}}", "")
+	assert.Equal(t, "Spotted: Eurasian Blue Tit", title)
+	assert.Empty(t, message)
+}
+
+func TestApplyDetectionTemplates_NilSettings(t *testing.T) {
+	conftest.SetTestSettings(nil)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	title, message := applyDetectionTemplates(
+		notification.TypeDetection, "Original Title", "Original Message", validDetectionProps(),
+	)
+	assert.Equal(t, "Original Title", title)
+	assert.Equal(t, "Original Message", message)
+}
+
+func TestApplyDetectionTemplates_LiferUsesLiferTemplate(t *testing.T) {
 	settings := conftest.GetTestSettings()
-	settings.Notification.Templates.NewSpecies.Title = "Spotted: {{.CommonName}}"
+	settings.Notification.Templates.Lifer.Title = "Lifer! {{.CommonName}}"
+	settings.Notification.Templates.NewSpecies.Title = "New: {{.CommonName}}"
 	conftest.SetTestSettings(settings)
 	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
-	title, message := renderDetectionTemplates(validDetectionProps())
-	assert.Equal(t, "Spotted: Eurasian Blue Tit", title)
-	assert.Empty(t, message)
+	props := validDetectionProps()
+	props[PropertyIsNewSpecies] = false
+	props[PropertyIsLifer] = true
+
+	title, _ := applyDetectionTemplates(notification.TypeDetection, "Original", "", props)
+	assert.Equal(t, "Lifer! Eurasian Blue Tit", title)
+}
+
+func TestApplyDetectionTemplates_LiferTakesPrecedenceOverNewSpecies(t *testing.T) {
+	settings := conftest.GetTestSettings()
+	settings.Notification.Templates.Lifer.Title = "Lifer! {{.CommonName}}"
+	settings.Notification.Templates.NewSpecies.Title = "New: {{.CommonName}}"
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	// A detection can be both new-to-install and a lifer at the same time.
+	props := validDetectionProps()
+	props[PropertyIsNewSpecies] = true
+	props[PropertyIsLifer] = true
+
+	title, _ := applyDetectionTemplates(notification.TypeDetection, "Original", "", props)
+	assert.Equal(t, "Lifer! Eurasian Blue Tit", title)
 }
 
 func TestApplyDetectionTemplates_NonDetectionUnchanged(t *testing.T) {

@@ -1,34 +1,37 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/svelte';
+import { render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import LifeListImportField from './LifeListImportField.svelte';
 
 // This test suite matches literal i18n key strings rather than translated
 // English text, following this codebase's convention (t() returns the raw
-// key in the test environment; see SpeciesConfigTable.test.ts).
+// key in the test environment; see SpeciesConfigTable.test.ts). Exception:
+// ConfirmModal's own default confirm/cancel labels resolve to real "Confirm"/
+// "Cancel" text because those keys happen to be in the curated test-mock
+// dictionary (see ConfirmModal.test.ts) — we deliberately don't override
+// confirmLabel with our own lifeList-specific key, both to avoid duplicating
+// the trigger button's text (which caused a real query-ambiguity bug here)
+// and to match the established convention elsewhere (e.g. RestartCard.svelte).
 const KEY_EMPTY_MESSAGE = 'settings.species.lifeList.emptyMessage';
-const KEY_ADD_MANUALLY_LABEL = 'settings.species.lifeList.addManuallyLabel';
+const KEY_SPECIES_COUNT = 'settings.species.lifeList.speciesCount';
 const KEY_UPLOAD_CSV = 'settings.species.lifeList.uploadCsv';
-const KEY_REMOVE = 'settings.species.remove';
-const KEY_DISMISS = 'common.dismiss';
-const KEY_SEARCH_PLACEHOLDER = 'settings.species.activeSpecies.search.placeholder';
+const KEY_DISMISS = 'common.ui.dismiss';
 const KEY_SHOW_REJECTED_ROWS = 'settings.species.lifeList.showRejectedRows';
 const KEY_IMPORT_SUMMARY = 'settings.species.lifeList.importSummary';
+const KEY_CLEAR_LIST = 'settings.species.lifeList.clearList';
 
 function renderField(overrides: Record<string, unknown> = {}) {
   const onImport = vi.fn();
-  const onRemove = vi.fn();
-  const onAdd = vi.fn();
+  const onClear = vi.fn();
   render(LifeListImportField, {
     props: {
-      species: [],
+      speciesCount: 0,
       onImport,
-      onRemove,
-      onAdd,
+      onClear,
       ...overrides,
     },
   });
-  return { onImport, onRemove, onAdd };
+  return { onImport, onClear };
 }
 
 describe('LifeListImportField', () => {
@@ -36,79 +39,28 @@ describe('LifeListImportField', () => {
     vi.clearAllMocks();
   });
 
-  it('shows the empty message when the list is empty', () => {
+  it('shows the empty message when the count is zero', () => {
     renderField();
     expect(screen.getByText(KEY_EMPTY_MESSAGE)).toBeInTheDocument();
   });
 
-  it('renders existing entries split into common and scientific name columns', () => {
-    renderField({ species: ['Turdus merula_Common Blackbird', 'Parus major'] });
-
-    expect(screen.getByText('Common Blackbird')).toBeInTheDocument();
-    expect(screen.getByText('Turdus merula')).toBeInTheDocument();
-    // Scientific-name-only entry: common name column falls back to an em dash.
-    expect(screen.getByText('Parus major')).toBeInTheDocument();
-    expect(screen.getByText('—')).toBeInTheDocument();
+  it('shows the current count badge', () => {
+    renderField({ speciesCount: 426 });
+    expect(screen.getByText(KEY_SPECIES_COUNT)).toBeInTheDocument();
   });
 
-  it('shows the current entry count badge', () => {
-    renderField({ species: ['Turdus merula_Common Blackbird', 'Parus major_Great Tit'] });
-    expect(screen.getByText('2')).toBeInTheDocument();
+  it('does not show the empty message when the count is nonzero', () => {
+    renderField({ speciesCount: 5 });
+    expect(screen.queryByText(KEY_EMPTY_MESSAGE)).not.toBeInTheDocument();
   });
 
-  it('adds a manually-typed entry and clears the input', async () => {
-    const { onAdd } = renderField();
-    const user = userEvent.setup();
-
-    const input = screen.getByRole('textbox', { name: KEY_ADD_MANUALLY_LABEL });
-    await user.type(input, 'Turdus merula');
-    await user.click(screen.getByRole('button', { name: KEY_ADD_MANUALLY_LABEL }));
-
-    expect(onAdd).toHaveBeenCalledWith('Turdus merula');
-    expect(input).toHaveValue('');
-  });
-
-  it('adds a manually-typed entry on Enter', async () => {
-    const { onAdd } = renderField();
-    const user = userEvent.setup();
-
-    const input = screen.getByRole('textbox', { name: KEY_ADD_MANUALLY_LABEL });
-    await user.type(input, 'Turdus merula{Enter}');
-
-    expect(onAdd).toHaveBeenCalledWith('Turdus merula');
-  });
-
-  it('does not call onAdd for blank/whitespace-only input', async () => {
-    const { onAdd } = renderField();
-    const user = userEvent.setup();
-
-    const input = screen.getByRole('textbox', { name: KEY_ADD_MANUALLY_LABEL });
-    await user.type(input, '   ');
-    const addButton = screen.getByRole('button', { name: KEY_ADD_MANUALLY_LABEL });
-    expect(addButton).toBeDisabled();
-
-    expect(onAdd).not.toHaveBeenCalled();
-  });
-
-  it('calls onRemove with the entry when its remove button is clicked', async () => {
-    const { onRemove } = renderField({ species: ['Turdus merula_Common Blackbird'] });
-    const user = userEvent.setup();
-
-    await user.click(screen.getByRole('button', { name: KEY_REMOVE }));
-
-    expect(onRemove).toHaveBeenCalledWith('Turdus merula_Common Blackbird');
-  });
-
-  it('disables interactive controls when disabled is true', () => {
-    renderField({ species: ['Turdus merula_Common Blackbird'], disabled: true });
-
-    expect(screen.getByRole('textbox', { name: KEY_ADD_MANUALLY_LABEL })).toBeDisabled();
+  it('disables the upload button when disabled is true', () => {
+    renderField({ disabled: true });
     expect(screen.getByRole('button', { name: KEY_UPLOAD_CSV })).toBeDisabled();
-    expect(screen.getByRole('button', { name: KEY_REMOVE })).toBeDisabled();
   });
 
-  it('parses an uploaded CSV and calls onImport with accepted entries', async () => {
-    const { onImport } = renderField();
+  it('parses an uploaded CSV and calls onImport with the accepted entries (replacing the list)', async () => {
+    const { onImport } = renderField({ speciesCount: 10 });
     const user = userEvent.setup();
 
     const csv = 'Common Name,Scientific Name\nCommon Blackbird,Turdus merula\n';
@@ -117,37 +69,31 @@ describe('LifeListImportField', () => {
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(fileInput, file);
 
-    expect(onImport).toHaveBeenCalledWith(['Turdus merula_Common Blackbird']);
+    // handleFileSelect is async (awaits readFileAsText); wait for its
+    // completion signal before asserting on onImport, or this races.
     expect(await screen.findByText(KEY_IMPORT_SUMMARY)).toBeInTheDocument();
+    expect(onImport).toHaveBeenCalledWith(['Turdus merula_Common Blackbird']);
   });
 
-  it('shows a rejected-rows toggle and reveals rows on click, without calling onImport for an all-rejected file', async () => {
+  it('shows a rejected-rows toggle and reveals rows on click, still calling onImport with the accepted subset', async () => {
     const { onImport } = renderField();
     const user = userEvent.setup();
 
-    const csv = 'Common Name,Scientific Name\nGarbage,not a species\n';
+    const csv = [
+      'Common Name,Scientific Name',
+      'Common Blackbird,Turdus merula',
+      'Garbage,not a species',
+    ].join('\n');
     const file = new File([csv], 'life-list.csv', { type: 'text/csv' });
 
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(fileInput, file);
 
-    expect(onImport).not.toHaveBeenCalled();
+    expect(await screen.findByText(KEY_IMPORT_SUMMARY)).toBeInTheDocument();
+    expect(onImport).toHaveBeenCalledWith(['Turdus merula_Common Blackbird']);
 
-    const toggle = await screen.findByText(KEY_SHOW_REJECTED_ROWS);
-    await user.click(toggle);
+    await user.click(screen.getByText(KEY_SHOW_REJECTED_ROWS));
     expect(screen.getByText(/not a species/i)).toBeInTheDocument();
-  });
-
-  it('filters the visible list via the search box once there are enough entries', async () => {
-    const many = Array.from({ length: 9 }, (_, i) => `Species number${i}_Species ${i}`);
-    renderField({ species: many });
-    const user = userEvent.setup();
-
-    const search = screen.getByLabelText(KEY_SEARCH_PLACEHOLDER);
-    await user.type(search, 'Species 3');
-
-    expect(screen.getByText('Species 3')).toBeInTheDocument();
-    expect(screen.queryByText('Species 0')).not.toBeInTheDocument();
   });
 
   it('dismisses the import summary when Dismiss is clicked', async () => {
@@ -160,8 +106,58 @@ describe('LifeListImportField', () => {
     await user.upload(fileInput, file);
 
     const dismissButton = await screen.findByText(KEY_DISMISS);
-    await fireEvent.click(dismissButton);
+    await user.click(dismissButton);
 
     expect(screen.queryByText(KEY_DISMISS)).not.toBeInTheDocument();
+  });
+
+  it('does not show a Clear List button when the count is zero', () => {
+    renderField({ speciesCount: 0 });
+    expect(screen.queryByText(KEY_CLEAR_LIST)).not.toBeInTheDocument();
+  });
+
+  it('shows a Clear List button when the count is nonzero', () => {
+    renderField({ speciesCount: 426 });
+    expect(screen.getByText(KEY_CLEAR_LIST)).toBeInTheDocument();
+  });
+
+  it('does not call onClear until the confirmation dialog is confirmed', async () => {
+    const { onClear } = renderField({ speciesCount: 426 });
+    const user = userEvent.setup();
+
+    await user.click(screen.getByText(KEY_CLEAR_LIST));
+    expect(onClear).not.toHaveBeenCalled();
+
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByText('Cancel'));
+    expect(onClear).not.toHaveBeenCalled();
+  });
+
+  it('calls onClear when the clear action is confirmed', async () => {
+    const { onClear } = renderField({ speciesCount: 426 });
+    const user = userEvent.setup();
+
+    await user.click(screen.getByText(KEY_CLEAR_LIST));
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByText('Confirm'));
+
+    expect(onClear).toHaveBeenCalledTimes(1);
+  });
+
+  it('dismisses any visible import summary when the clear action is confirmed', async () => {
+    renderField({ speciesCount: 426 });
+    const user = userEvent.setup();
+
+    const csv = 'Common Name,Scientific Name\nCommon Blackbird,Turdus merula\n';
+    const file = new File([csv], 'life-list.csv', { type: 'text/csv' });
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, file);
+    expect(await screen.findByText(KEY_IMPORT_SUMMARY)).toBeInTheDocument();
+
+    await user.click(screen.getByText(KEY_CLEAR_LIST));
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByText('Confirm'));
+
+    expect(screen.queryByText(KEY_IMPORT_SUMMARY)).not.toBeInTheDocument();
   });
 });

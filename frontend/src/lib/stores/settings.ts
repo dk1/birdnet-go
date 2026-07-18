@@ -527,7 +527,10 @@ export interface SpeciesTrackingSettings {
 // speciesTracking's per-install "new species" concept.
 export interface LifeListSettings {
   enabled: boolean;
-  species: string[]; // "Scientific name_Common name" entries, same convention as SpeciesSettings.include
+  // "Scientific name_Common name" entries, same convention as SpeciesSettings.include.
+  // A Go nil slice marshals to JSON null, so this arrives as `null` on any
+  // install that hasn't saved a life list yet — never assume it's an array.
+  species: string[] | null;
 }
 
 // Extended capture settings
@@ -809,6 +812,7 @@ export interface NewSpeciesTemplate {
 
 export interface NotificationTemplates {
   newSpecies?: NewSpeciesTemplate;
+  lifer?: NewSpeciesTemplate;
 }
 
 // Main notification settings structure
@@ -1081,6 +1085,10 @@ function createEmptySettings(): SettingsFormData {
       },
       templates: {
         newSpecies: {
+          title: '',
+          message: '',
+        },
+        lifer: {
           title: '',
           message: '',
         },

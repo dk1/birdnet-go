@@ -240,17 +240,34 @@ func buildTemplateDataFromProps(props map[string]any) *notification.TemplateData
 }
 
 // applyDetectionTemplates overrides title and message with user-configured
-// notification templates for new-species detection events. Non-detection types
-// and non-new-species detections pass through unchanged.
+// notification templates for new-species and lifer detection events. A
+// detection can be both (new to this install AND never seen anywhere per the
+// imported life list); lifer takes precedence as the more specific, more
+// notable case. Non-detection types and detections that are neither pass
+// through unchanged.
 func applyDetectionTemplates(notifType notification.Type, title, message string, eventProps map[string]any) (renderedTitle, renderedMessage string) {
 	if notifType != notification.TypeDetection {
 		return title, message
 	}
-	isNew, _ := eventProps[PropertyIsNewSpecies].(bool)
-	if !isNew {
+
+	settings := conf.GetSettings()
+	if settings == nil {
 		return title, message
 	}
-	rt, rm := renderDetectionTemplates(eventProps)
+
+	var titleTmpl, msgTmpl string
+	switch {
+	case eventProps[PropertyIsLifer] == true:
+		titleTmpl = settings.Notification.Templates.Lifer.Title
+		msgTmpl = settings.Notification.Templates.Lifer.Message
+	case eventProps[PropertyIsNewSpecies] == true:
+		titleTmpl = settings.Notification.Templates.NewSpecies.Title
+		msgTmpl = settings.Notification.Templates.NewSpecies.Message
+	default:
+		return title, message
+	}
+
+	rt, rm := renderDetectionTemplates(eventProps, titleTmpl, msgTmpl)
 	if rt != "" {
 		title = rt
 	}
@@ -260,14 +277,7 @@ func applyDetectionTemplates(notifType notification.Type, title, message string,
 	return title, message
 }
 
-func renderDetectionTemplates(props map[string]any) (title, message string) {
-	settings := conf.GetSettings()
-	if settings == nil {
-		return "", ""
-	}
-
-	titleTmpl := settings.Notification.Templates.NewSpecies.Title
-	msgTmpl := settings.Notification.Templates.NewSpecies.Message
+func renderDetectionTemplates(props map[string]any, titleTmpl, msgTmpl string) (title, message string) {
 	if titleTmpl == "" && msgTmpl == "" {
 		return "", ""
 	}

@@ -41,7 +41,47 @@ describe('parseLifeListCsv', () => {
     expect(result.rejected[0].rowNumber).toBe(3);
   });
 
-  it('rejects rows that do not look like a binomial scientific name', () => {
+  it('identifies "spuh" placeholders and explains why BirdNET can never match them', () => {
+    const csv = ['Common Name,Scientific Name', 'tern sp.,Sterninae sp.'].join('\n');
+
+    const result = parseLifeListCsv(csv);
+
+    expect(result.accepted).toEqual([]);
+    expect(result.rejected).toHaveLength(1);
+    expect(result.rejected[0].reason).toContain('"Sterninae sp." ("tern sp.")');
+    expect(result.rejected[0].reason).toContain('spuh');
+    expect(result.rejected[0].reason).toContain('BirdNET always reports a specific species');
+  });
+
+  it('identifies eBird "slash" species-pair entries and explains why BirdNET can never match them', () => {
+    const csv = [
+      'Common Name,Scientific Name',
+      'Yellow/Mangrove Warbler,Setophaga aestiva/petechia',
+    ].join('\n');
+
+    const result = parseLifeListCsv(csv);
+
+    expect(result.rejected).toHaveLength(1);
+    expect(result.rejected[0].reason).toContain(
+      '"Setophaga aestiva/petechia" ("Yellow/Mangrove Warbler")'
+    );
+    expect(result.rejected[0].reason).toContain('slash');
+    expect(result.rejected[0].reason).toContain('one specific species per');
+  });
+
+  it('identifies hybrid entries and explains why BirdNET can never match them', () => {
+    const csv = [
+      'Common Name,Scientific Name',
+      'Mallard x American Black Duck,Anas platyrhynchos x rubripes',
+    ].join('\n');
+
+    const result = parseLifeListCsv(csv);
+
+    expect(result.rejected).toHaveLength(1);
+    expect(result.rejected[0].reason).toContain('hybrid');
+  });
+
+  it('falls back to a generic reason for unrecognized garbage rows', () => {
     const csv = [
       'Common Name,Scientific Name',
       'Garbage Row,not a species name at all',
@@ -53,6 +93,18 @@ describe('parseLifeListCsv', () => {
     expect(result.accepted).toEqual(['Turdus merula_Common Blackbird']);
     expect(result.rejected).toHaveLength(1);
     expect(result.rejected[0].rowNumber).toBe(2);
+    expect(result.rejected[0].reason).toContain(
+      'does not look like a single scientific species name'
+    );
+  });
+
+  it('includes the common name in the empty-scientific-name rejection reason', () => {
+    const csv = ['Common Name,Scientific Name', 'Mystery Bird,'].join('\n');
+
+    const result = parseLifeListCsv(csv);
+
+    expect(result.rejected).toHaveLength(1);
+    expect(result.rejected[0].reason).toBe('Empty scientific name (common name: "Mystery Bird")');
   });
 
   it('silently deduplicates repeated species (e.g. multiple sightings)', () => {

@@ -424,8 +424,17 @@
   // Tracking settings state
   let trackingSettings = $derived($speciesTrackingSettings);
 
-  // Life list settings state
-  let lifeList = $derived($lifeListSettings ?? { enabled: false, species: [] as string[] });
+  // Life list settings state. `species` can legitimately arrive as `null`
+  // (a Go nil slice marshals to JSON null, not []) on any install that has
+  // never saved a life list yet, so guard it explicitly rather than relying
+  // on the outer `??` fallback, which only covers `lifeList` itself being nullish.
+  let lifeList = $derived.by(() => {
+    const base = $lifeListSettings ?? { enabled: false, species: [] as string[] };
+    return {
+      enabled: base.enabled ?? false,
+      species: Array.isArray(base.species) ? base.species : [],
+    };
+  });
 
   function setLifeListEnabled(enabled: boolean) {
     settingsActions.updateSection('realtime', {
@@ -434,41 +443,22 @@
     });
   }
 
-  function updateLifeListSpecies(updatedSpecies: string[]) {
+  // A new CSV upload replaces the whole life list — see LifeListImportField's
+  // doc comment. The CSV-level "N of M rows imported" summary is already
+  // shown by LifeListImportField itself, so this deliberately does not fire
+  // a second toast.
+  function importLifeListSpecies(entries: string[]) {
     settingsActions.updateSection('realtime', {
       ...$realtimeSettings,
-      lifeList: { ...lifeList, species: updatedSpecies },
+      lifeList: { ...lifeList, species: entries },
     });
   }
 
-  function addLifeListSpecies(entry: string) {
-    const trimmed = entry.trim();
-    if (!trimmed) return;
-    if (lifeList.species.some(s => s.toLowerCase() === trimmed.toLowerCase())) {
-      toastActions.error(t('settings.species.lifeList.duplicateEntry'));
-      return;
-    }
-    updateLifeListSpecies([...lifeList.species, trimmed]);
-  }
-
-  function removeLifeListSpecies(entry: string) {
-    updateLifeListSpecies(lifeList.species.filter(s => s !== entry));
-  }
-
-  // Merges newly-parsed CSV entries into the existing life list. The CSV-level
-  // "N of M rows imported" summary is already shown by LifeListImportField
-  // itself, so this deliberately does not fire a second toast.
-  function importLifeListSpecies(entries: string[]) {
-    const existing = new Set(lifeList.species.map(s => s.toLowerCase()));
-    const merged = [...lifeList.species];
-    for (const entry of entries) {
-      const key = entry.toLowerCase();
-      if (!existing.has(key)) {
-        existing.add(key);
-        merged.push(entry);
-      }
-    }
-    updateLifeListSpecies(merged);
+  function clearLifeList() {
+    settingsActions.updateSection('realtime', {
+      ...$realtimeSettings,
+      lifeList: { ...lifeList, species: [] },
+    });
   }
 
   // Month options for dropdown menus (derived once, used multiple times)
@@ -2069,11 +2059,10 @@
 
         {#if lifeList.enabled}
           <LifeListImportField
-            species={lifeList.species}
+            speciesCount={lifeList.species.length}
             disabled={store.isLoading || store.isSaving}
             onImport={importLifeListSpecies}
-            onAdd={addLifeListSpecies}
-            onRemove={removeLifeListSpecies}
+            onClear={clearLifeList}
           />
         {/if}
       </div>

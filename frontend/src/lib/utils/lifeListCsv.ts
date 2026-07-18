@@ -23,6 +23,12 @@ export interface LifeListParseResult {
 const SCIENTIFIC_NAME_HEADERS = ['scientific name', 'sci_name', 'scientific_name'];
 const COMMON_NAME_HEADERS = ['common name', 'com_name', 'common_name'];
 
+// eBird's own explanation of "spuh"/slash/hybrid taxonomic categories, linked
+// from the rejected-rows panel so users understand these are a real eBird
+// concept, not a parsing bug.
+export const EBIRD_TAXONOMY_HELP_URL =
+  'https://support.ebird.org/en/support/solutions/articles/48000837816-the-ebird-taxonomy';
+
 // Two space-separated words, letters (and hyphens, for hyphenated epithets)
 // only, optionally followed by a subspecies epithet. Deliberately permissive:
 // this only screens out obviously-garbage rows (blank cells, header-like
@@ -81,6 +87,35 @@ function findColumn(header: string[], candidates: string[]): number {
   return -1;
 }
 
+/**
+ * Describes why a scientific name that failed BINOMIAL_PATTERN can't be
+ * matched, naming the specific eBird taxonomic category when recognizable
+ * (spuh, slash, hybrid) rather than a generic "invalid" message — these are
+ * real, common eBird export categories, not malformed data.
+ */
+function describeUnmatchable(scientificName: string, commonName: string): string {
+  const label = commonName ? `"${scientificName}" ("${commonName}")` : `"${scientificName}"`;
+
+  if (scientificName.includes('/')) {
+    return (
+      `${label} is an eBird "slash" entry — identification to one of two similar species ` +
+      `(e.g. Tundra/Trumpeter Swan). BirdNET always reports one specific species per ` +
+      `detection, so a slash entry can never match.`
+    );
+  }
+  if (/ x /i.test(scientificName)) {
+    return `${label} is a hybrid entry — BirdNET does not report hybrid identifications.`;
+  }
+  if (/\ssp\.?$/i.test(scientificName)) {
+    return (
+      `${label} is an eBird "spuh" — a genus/family-level placeholder for a bird not ` +
+      `identified to species (e.g. "Empidonax sp."). BirdNET always reports a specific ` +
+      `species, so a spuh can never match.`
+    );
+  }
+  return `${label} does not look like a single scientific species name.`;
+}
+
 export function parseLifeListCsv(csvText: string): LifeListParseResult {
   const lines = csvText.split(/\r\n|\r|\n/).filter(line => line.trim().length > 0);
 
@@ -117,14 +152,17 @@ export function parseLifeListCsv(csvText: string): LifeListParseResult {
     const commonName = comCol !== -1 ? (fields[comCol] ?? '').trim() : '';
 
     if (!scientificName) {
-      rejected.push({ rowNumber, rawRow, reason: 'Empty scientific name' });
+      const reason = commonName
+        ? `Empty scientific name (common name: "${commonName}")`
+        : 'Empty scientific name';
+      rejected.push({ rowNumber, rawRow, reason });
       continue;
     }
     if (!BINOMIAL_PATTERN.test(scientificName)) {
       rejected.push({
         rowNumber,
         rawRow,
-        reason: `"${scientificName}" does not look like a scientific name`,
+        reason: describeUnmatchable(scientificName, commonName),
       });
       continue;
     }
