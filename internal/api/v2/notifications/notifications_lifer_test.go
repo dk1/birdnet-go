@@ -9,6 +9,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/alerting"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -96,4 +97,48 @@ func TestCreateTestLiferNotification_Success(t *testing.T) {
 	require.NotNil(t, response.ExpiresAt)
 	expectedExpiry := response.Timestamp.Add(24 * time.Hour)
 	assert.WithinDuration(t, expectedExpiry, *response.ExpiresAt, time.Second)
+}
+
+// TestCreateTestLiferNotification_EmptyTemplate_UsesRealDefault mirrors
+// TestCreateTestNewSpeciesNotification_EmptyTemplate_UsesRealDefault: with
+// no Templates.Lifer configured, the fallback title/message must match what
+// a real, uncustomized lifer detection would actually produce.
+func TestCreateTestLiferNotification_EmptyTemplate_UsesRealDefault(t *testing.T) {
+	config := &notification.ServiceConfig{
+		Debug:              true,
+		MaxNotifications:   100,
+		CleanupInterval:    30 * time.Minute,
+		RateLimitWindow:    1 * time.Minute,
+		RateLimitMaxEvents: 10,
+	}
+
+	service := notification.NewService(config)
+	t.Cleanup(service.Stop)
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/notifications/test/lifer", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	controller := New(&apicore.Core{}, service, nil)
+	settings := &conf.Settings{}
+	settings.Security.Host = "localhost"
+	settings.WebServer.Port = "8080"
+	settings.Main.TimeAs24h = true
+	// Templates.Lifer deliberately left empty (zero value).
+	controller.Settings.Store(settings)
+	apitest.PublishTestSettings(t, settings)
+
+	err := controller.CreateTestLiferNotification(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response notification.Notification
+	err = parseJSONResponse(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	assert.Equal(t, alerting.RuleNameLifer, response.Title,
+		"empty-template title fallback should match the seeded rule's own name")
+	assert.Equal(t, alerting.DefaultDetectionMessage("Test Bird Species", testNotificationConfidence), response.Message,
+		"empty-template message fallback should match the real alerting default")
 }
