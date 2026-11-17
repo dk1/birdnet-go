@@ -4,7 +4,7 @@
   Purpose: Configure the second-model check a lifer must pass before its alert
   is sent. The backend re-reads the detection's audio and scores it with the
   chosen model; the alert fires only when that model also hears the species at
-  the minimum confidence or above. Only enabled bird models are offered, and the
+  the minimum confidence or above. Only enabled bird and wildlife models are offered, and the
   model must stay enabled under the analysis settings to be loaded, although it
   need not run on any audio source.
 
@@ -40,9 +40,13 @@
     return fetchModels();
   });
 
+  // Models that classify birds: the bird-only ones and the wildlife ones (Perch),
+  // which cover birds among other taxa. Bat and geomodel entries cannot verify a bird.
+  const VERIFIER_CATEGORIES = new Set(['bird', 'wildlife']);
+
   let modelOptions = $derived(
     getAvailableModels()
-      .filter(m => m.category === 'bird' && m.state !== 'failed')
+      .filter(m => VERIFIER_CATEGORIES.has(m.category) && m.state !== 'failed')
       .map(m => ({ value: m.id, label: m.name })) as SelectOption[]
   );
 
