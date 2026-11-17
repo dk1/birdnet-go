@@ -2,6 +2,7 @@ package processor
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/speciesindex"
 )
 
@@ -93,7 +95,44 @@ func (a *DatabaseAction) verifyLifer(ctx context.Context) bool {
 	} else {
 		GetLogger().Info("Lifer re-analysed by the verifying model", fields...)
 	}
+	if verdict == liferRejected && cfg.NotifyRejected {
+		a.notifyLiferRejected(cfg, best)
+	}
 	return verdict != liferRejected
+}
+
+// notifyLiferRejected tells the user a lifer was withheld because the verifier
+// did not confirm it. It is a TypeDetection notification in the "detection"
+// component at PriorityHigh, like the lifer alert itself, so push providers that
+// deliver lifers deliver it too, and it carries note_id so it links to the saved
+// detection for a listen.
+func (a *DatabaseAction) notifyLiferRejected(cfg *conf.LiferVerificationSettings, best float64) {
+	if !notification.IsInitialized() {
+		return
+	}
+	service := notification.GetService()
+	if service == nil {
+		return
+	}
+
+	title := "Lifer not confirmed: " + a.Result.Species.CommonName
+	message := fmt.Sprintf("Detected by %s at %.0f%%, but %s scored it %.0f%% (needs %.0f%%). Kept as an ordinary detection.",
+		a.Result.Model.Name, a.Result.Confidence*100, cfg.Model, best*100, cfg.EffectiveMinConfidence()*100)
+
+	notif := notification.NewNotification(notification.TypeDetection, notification.PriorityHigh, title, message).
+		WithComponent("detection").
+		WithMetadata("species", a.Result.Species.CommonName).
+		WithMetadata("scientific_name", a.Result.Species.ScientificName).
+		WithMetadata("lifer_verification", liferRejected.String())
+	if a.Result.ID != 0 {
+		notif = notif.WithMetadata("note_id", a.Result.ID)
+	}
+	if err := service.CreateWithMetadata(notif); err != nil {
+		GetLogger().Warn("Failed to send the lifer rejection notification",
+			logger.String("component", "analysis.processor.lifer_verification"),
+			logger.String("detection_id", a.CorrelationID),
+			logger.Error(err))
+	}
 }
 
 // runLiferVerification resolves the verifier, reads the detection's audio and

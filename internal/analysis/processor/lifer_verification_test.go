@@ -9,7 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
 // fakeLiferRunner returns one result set per PredictModel call, in order, and
@@ -132,4 +134,34 @@ func TestScoreLiferAudio(t *testing.T) {
 		assert.Equal(t, liferUnverified, verdict)
 		assert.Empty(t, r.calls)
 	})
+}
+
+// TestNotifyLiferRejected uses the process-wide notification service, so it does
+// not run in parallel.
+func TestNotifyLiferRejected(t *testing.T) {
+	notification.ResetForTest()
+	notification.Initialize(notification.DefaultServiceConfig())
+	t.Cleanup(func() {
+		notification.GetService().Stop()
+		notification.ResetForTest()
+	})
+
+	det := testDetection()
+	det.Result.ID = 42
+	action := &DatabaseAction{Result: det.Result, CorrelationID: "test-lifer-rejected"}
+	cfg := &conf.LiferVerificationSettings{Enabled: true, Model: "perch_v2", MinConfidence: 0.6, NotifyRejected: true}
+
+	action.notifyLiferRejected(cfg, 0.12)
+
+	list, err := notification.GetService().List(&notification.FilterOptions{})
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	n := list[0]
+	assert.Equal(t, notification.TypeDetection, n.Type)
+	assert.Equal(t, notification.PriorityHigh, n.Priority)
+	assert.Equal(t, "detection", n.Component)
+	assert.Contains(t, n.Title, det.Result.Species.CommonName)
+	assert.Contains(t, n.Message, "perch_v2 scored it 12%")
+	assert.Contains(t, n.Message, "needs 60%")
+	assert.Equal(t, uint(42), n.Metadata["note_id"])
 }

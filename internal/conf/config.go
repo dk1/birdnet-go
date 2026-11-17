@@ -1018,9 +1018,10 @@ type LifeListSettings struct {
 // (model not loaded, audio no longer buffered, timeout) the alert is sent
 // unverified rather than dropped, so a real lifer is never lost to a fault.
 type LiferVerificationSettings struct {
-	Enabled       bool    `yaml:"enabled" json:"enabled"`             // true to re-analyse lifers with a second model before alerting
-	Model         string  `yaml:"model" json:"model"`                 // config model ID of the verifying model, e.g. "perch_v2"; must differ from the detecting model
-	MinConfidence float64 `yaml:"minconfidence" json:"minConfidence"` // lowest verifier confidence, 0 to 1, that confirms the lifer; 0 uses DefaultLiferVerificationMinConfidence
+	Enabled        bool    `yaml:"enabled" json:"enabled"`               // true to re-analyse lifers with a second model before alerting
+	Model          string  `yaml:"model" json:"model"`                   // config model ID of the verifying model, e.g. "perch_v2"; must differ from the detecting model
+	MinConfidence  float64 `yaml:"minconfidence" json:"minConfidence"`   // lowest verifier confidence, 0 to 1, that confirms the lifer; 0 uses DefaultLiferVerificationMinConfidence
+	NotifyRejected bool    `yaml:"notifyrejected" json:"notifyRejected"` // true to send a notification when the verifier rejects a lifer, to check the verifier is working
 }
 
 // YearlyTrackingSettings contains settings for tracking first arrivals each year

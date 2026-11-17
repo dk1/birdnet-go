@@ -96,5 +96,13 @@
         onUpdate={value => update({ minConfidence: value / 100 })}
       />
     </div>
+
+    <Checkbox
+      checked={settings.notifyRejected}
+      label={t('settings.species.lifeList.verification.notifyRejectedLabel')}
+      helpText={t('settings.species.lifeList.verification.notifyRejectedHelp')}
+      {disabled}
+      onchange={notifyRejected => update({ notifyRejected })}
+    />
   {/if}
 </div>

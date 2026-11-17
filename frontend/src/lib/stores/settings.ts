@@ -658,6 +658,7 @@ export interface LiferVerificationSettings {
   enabled: boolean;
   model: string; // config model alias, e.g. "perch_v2"
   minConfidence: number; // 0 to 1; 0 means the server default
+  notifyRejected: boolean; // notify when the verifier rejects a lifer
 }
 
 export const LIFER_VERIFICATION_DEFAULT_MIN_CONFIDENCE = 0.5;
@@ -1471,6 +1472,7 @@ export const lifeListSettings = derived(settingsStore, ($store): NormalizedLifeL
       enabled: raw?.verification?.enabled ?? false,
       model: raw?.verification?.model ?? '',
       minConfidence: raw?.verification?.minConfidence ?? 0,
+      notifyRejected: raw?.verification?.notifyRejected ?? false,
     },
   };
 });

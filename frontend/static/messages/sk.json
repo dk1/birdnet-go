@@ -4819,7 +4819,9 @@
           "modelHelp": "Must differ from the model that makes the detection.",
           "modelPlaceholder": "Select a model",
           "minConfidenceLabel": "Minimum confidence (%)",
-          "minConfidenceHelp": "The verifying model must report the species at this confidence or higher."
+          "minConfidenceHelp": "The verifying model must report the species at this confidence or higher.",
+          "notifyRejectedLabel": "Notify me when a lifer is not confirmed",
+          "notifyRejectedHelp": "Sends a notification each time the verifying model rejects a lifer, with both models’ confidence and a link to the recording, so you can check the verifier is doing its job."
         }
       },
       "dynamicThreshold": {

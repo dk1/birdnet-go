@@ -3563,6 +3563,8 @@ export type TranslationKey =
   | 'settings.species.lifeList.verification.modelPlaceholder'
   | 'settings.species.lifeList.verification.minConfidenceLabel'
   | 'settings.species.lifeList.verification.minConfidenceHelp'
+  | 'settings.species.lifeList.verification.notifyRejectedLabel'
+  | 'settings.species.lifeList.verification.notifyRejectedHelp'
   | 'settings.species.dynamicThreshold.tabLabel'
   | 'settings.species.dynamicThreshold.title'
   | 'settings.species.dynamicThreshold.description'
