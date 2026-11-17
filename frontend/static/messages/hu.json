@@ -4810,7 +4810,17 @@
         "showRejectedRows": "Show {count} rows that could not be imported",
         "hideRejectedRows": "Hide rejected rows",
         "rejectedRow": "Row {row}",
-        "learnAboutTaxonomy": "Learn about eBird's taxonomy categories (spuh, slash, hybrid)"
+        "learnAboutTaxonomy": "Learn about eBird's taxonomy categories (spuh, slash, hybrid)",
+        "verification": {
+          "enableLabel": "Double-check lifers with a second model",
+          "enableHelp": "Before a lifer alert is sent, its audio is re-analysed by another model. The alert is sent only if that model also hears the species; otherwise the detection is kept as an ordinary detection. If the check cannot run, the alert is sent anyway.",
+          "needSecondModel": "Enable a second bird model (for example Perch) in the analysis settings. It does not need to run on any audio source; it is only used to check lifers.",
+          "modelLabel": "Verifying model",
+          "modelHelp": "Must differ from the model that makes the detection.",
+          "modelPlaceholder": "Select a model",
+          "minConfidenceLabel": "Minimum confidence (%)",
+          "minConfidenceHelp": "The verifying model must report the species at this confidence or higher."
+        }
       },
       "dynamicThreshold": {
         "tabLabel": "Tanult",

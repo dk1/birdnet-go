@@ -129,6 +129,11 @@ const (
 	// normalizeAlternateMinConfidence resets an invalid value to it on load.
 	DefaultAlternateMinConfidence = 0.1
 
+	// DefaultLiferVerificationMinConfidence is the verifier confidence, on the 0 to
+	// 1 scale, that confirms a lifer when LiferVerificationSettings.MinConfidence is
+	// unset.
+	DefaultLiferVerificationMinConfidence = 0.5
+
 	// DefaultModelConsensusMinModels is the default number of agreeing models the
 	// model consensus filter requires. normalizeModelConsensus resets an invalid
 	// value to it on load.

@@ -22,3 +22,12 @@ func (s *Settings) IsOnLifeList(result string) bool {
 	}
 	return false
 }
+
+// EffectiveMinConfidence returns MinConfidence, or
+// DefaultLiferVerificationMinConfidence when it is unset.
+func (v *LiferVerificationSettings) EffectiveMinConfidence() float64 {
+	if v.MinConfidence <= 0 {
+		return DefaultLiferVerificationMinConfidence
+	}
+	return v.MinConfidence
+}

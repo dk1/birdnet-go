@@ -87,6 +87,10 @@ func validateRealtimeSettings(settings *RealtimeSettings) error {
 		return err
 	}
 
+	if err := validateLiferVerificationSettings(&settings.LifeList.Verification); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -111,6 +115,24 @@ func validateModelConsensusSettings(settings *ModelConsensusSettings) error {
 			Category(errors.CategoryValidation).
 			Context("validation_type", "model-consensus-min-models").
 			Context("min_models", settings.MinModels).
+			Build()
+	}
+	return nil
+}
+
+// validateLiferVerificationSettings rejects a confidence outside 0 to 1 (0 means
+// unset and uses the default) and an enabled check that names no model.
+func validateLiferVerificationSettings(settings *LiferVerificationSettings) error {
+	if settings.MinConfidence < 0 || settings.MinConfidence > 1 {
+		return errors.Newf("lifer verification minConfidence must be between 0 and 1, got %v", settings.MinConfidence).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "lifer-verification-min-confidence").
+			Build()
+	}
+	if settings.Enabled && strings.TrimSpace(settings.Model) == "" {
+		return errors.Newf("lifer verification is enabled but no verifying model is set").
+			Category(errors.CategoryValidation).
+			Context("validation_type", "lifer-verification-model").
 			Build()
 	}
 	return nil

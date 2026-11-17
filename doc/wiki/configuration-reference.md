@@ -375,6 +375,9 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.extendedcapture.species` | string[] |  |
 | `realtime.lifelist.enabled` | boolean | true to enable lifer notifications |
 | `realtime.lifelist.species` | string[] | Life list entries, "Scientific name_Common name" format (same convention as SpeciesSettings.Include) |
+| `realtime.lifelist.verification.enabled` | boolean | true to re-analyse lifers with a second model before alerting |
+| `realtime.lifelist.verification.model` | string | config model ID of the verifying model, e.g. "perch_v2"; must differ from the detecting model |
+| `realtime.lifelist.verification.minconfidence` | number | lowest verifier confidence, 0 to 1, that confirms the lifer; 0 uses DefaultLiferVerificationMinConfidence |
 
 ## webserver
 

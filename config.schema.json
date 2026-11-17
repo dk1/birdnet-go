@@ -1181,11 +1181,34 @@
           },
           "type": "array",
           "description": "Life list entries, \"Scientific name_Common name\" format (same convention as SpeciesSettings.Include)"
+        },
+        "verification": {
+          "$ref": "#/$defs/LiferVerificationSettings",
+          "description": "Re-analysis of a lifer's audio by a second model before alerting"
         }
       },
       "additionalProperties": false,
       "type": "object",
       "description": "LifeListSettings contains the user's real-world life list (e.g."
+    },
+    "LiferVerificationSettings": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to re-analyse lifers with a second model before alerting"
+        },
+        "model": {
+          "type": "string",
+          "description": "config model ID of the verifying model, e.g. \"perch_v2\"; must differ from the detecting model"
+        },
+        "minconfidence": {
+          "type": "number",
+          "description": "lowest verifier confidence, 0 to 1, that confirms the lifer; 0 uses DefaultLiferVerificationMinConfidence"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "LiferVerificationSettings configures the second-model check a lifer must pass before its notification is sent."
     },
     "LiveStreamSettings": {
       "properties": {

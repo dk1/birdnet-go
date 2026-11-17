@@ -420,6 +420,52 @@ func TestPublishDetectionEvent_LiferNotOnList(t *testing.T) {
 		"a repeat detection within the suppression window must not re-flag as a lifer")
 }
 
+// TestPublishDetectionEvent_LiferVerificationFailsOpen verifies that a lifer whose
+// second-model check cannot run (here: no classifier) still raises the alert, so a
+// real lifer is never lost to a verifier fault.
+func TestPublishDetectionEvent_LiferVerificationFailsOpen(t *testing.T) {
+	consumer := setupEventBusWithConsumer(t)
+
+	det := testDetection()
+	settings := &conf.Settings{}
+	settings.Realtime.LifeList.Enabled = true
+	settings.Realtime.LifeList.Species = []string{"Turdus merula_Common Blackbird"}
+	settings.Realtime.LifeList.Verification = conf.LiferVerificationSettings{Enabled: true, Model: "perch_v2"}
+
+	mockDS := mocks.NewMockInterface(t)
+	mockDS.EXPECT().
+		GetActiveNotificationHistoryByType(mock.Anything, mock.Anything, mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).
+		Maybe()
+	mockDS.EXPECT().
+		SaveNotificationHistory(mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
+		Return(nil).
+		Maybe()
+
+	tracker := species.NewTrackerFromSettings(mockDS, &conf.SpeciesTrackingSettings{
+		Enabled:                      true,
+		NewSpeciesWindowDays:         testWindowDays,
+		SyncIntervalMinutes:          testSyncIntervalMins,
+		NotificationSuppressionHours: testSuppressionHours,
+	})
+
+	action := &DatabaseAction{
+		Settings:          settings,
+		Result:            det.Result,
+		CorrelationID:     "test-lifer-verification-fails-open",
+		NewSpeciesTracker: tracker,
+	}
+
+	action.publishDetectionEvent(t.Context(), false, 30, species.NoveltyStatus{})
+
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		assert.Len(collect, consumer.GetReceivedEvents(), 1)
+	}, 2*time.Second, 50*time.Millisecond)
+
+	assert.Equal(t, true, consumer.GetReceivedEvents()[0].GetMetadata()[events.DetectionMetadataIsLifer],
+		"an unverifiable lifer must still be flagged")
+}
+
 // TestPublishDetectionEvent_LiferIndependentOfNewSpecies verifies that lifer
 // status is orthogonal to isNewSpecies: a new-species detection for a species
 // already on the life list must not be flagged as a lifer.

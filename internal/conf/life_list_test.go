@@ -96,3 +96,38 @@ func TestIsOnLifeList_TaxonomicAlias(t *testing.T) {
 		})
 	}
 }
+
+func TestLiferVerificationEffectiveMinConfidence(t *testing.T) {
+	t.Parallel()
+
+	assert.InDelta(t, DefaultLiferVerificationMinConfidence, (&LiferVerificationSettings{}).EffectiveMinConfidence(), 1e-9)
+	assert.InDelta(t, 0.7, (&LiferVerificationSettings{MinConfidence: 0.7}).EffectiveMinConfidence(), 1e-9)
+}
+
+func TestValidateLiferVerificationSettings(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		in      LiferVerificationSettings
+		wantErr bool
+	}{
+		{"off and unset", LiferVerificationSettings{}, false},
+		{"on with model", LiferVerificationSettings{Enabled: true, Model: "perch_v2", MinConfidence: 0.6}, false},
+		{"on without model", LiferVerificationSettings{Enabled: true}, true},
+		{"confidence above one", LiferVerificationSettings{MinConfidence: 1.5}, true},
+		{"negative confidence", LiferVerificationSettings{MinConfidence: -0.1}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := validateLiferVerificationSettings(&tt.in)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}

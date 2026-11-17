@@ -55,6 +55,8 @@
   import SpeciesConfigEditor from '$lib/desktop/features/settings/components/SpeciesConfigEditor.svelte';
   import SpeciesConfigTable from '$lib/desktop/features/settings/components/SpeciesConfigTable.svelte';
   import LifeListImportField from '$lib/desktop/features/settings/components/LifeListImportField.svelte';
+  import LifeListVerificationField from '$lib/desktop/features/settings/components/LifeListVerificationField.svelte';
+  import type { LiferVerificationSettings } from '$lib/stores/settings';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { safeGet } from '$lib/utils/security';
@@ -451,6 +453,13 @@
     settingsActions.updateSection('realtime', {
       ...$realtimeSettings,
       lifeList: { ...lifeList, species: entries },
+    });
+  }
+
+  function setLifeListVerification(verification: LiferVerificationSettings) {
+    settingsActions.updateSection('realtime', {
+      ...$realtimeSettings,
+      lifeList: { ...lifeList, verification },
     });
   }
 
@@ -2208,6 +2217,12 @@
             disabled={store.isLoading || store.isSaving}
             onImport={importLifeListSpecies}
             onClear={clearLifeList}
+          />
+
+          <LifeListVerificationField
+            settings={lifeList.verification}
+            disabled={store.isLoading || store.isSaving}
+            onChange={setLifeListVerification}
           />
         {/if}
       </div>

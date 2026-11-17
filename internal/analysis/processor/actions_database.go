@@ -710,7 +710,7 @@ func (a *DatabaseAction) publishDetectionEvent(ctx context.Context, isNewSpecies
 
 	// Computed once: applies identically regardless of which branch below
 	// publishes the event (isLifer is independent of isNewSpecies).
-	isLifer := a.shouldNotifyLifer()
+	isLifer := a.shouldNotifyLifer() && a.verifyLifer(ctx)
 
 	if isNewSpecies {
 		suppress, notificationTime := a.shouldSuppressNewSpeciesNotification()

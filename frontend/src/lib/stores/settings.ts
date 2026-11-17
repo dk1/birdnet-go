@@ -649,14 +649,26 @@ export interface LifeListSettings {
   // A Go nil slice marshals to JSON null, so this arrives as `null` on any
   // install that hasn't saved a life list yet — never assume it's an array.
   species: string[] | null;
+  // Second-model re-analysis of a lifer before its alert is sent. Absent on a
+  // server that predates the field.
+  verification?: LiferVerificationSettings;
 }
+
+export interface LiferVerificationSettings {
+  enabled: boolean;
+  model: string; // config model alias, e.g. "perch_v2"
+  minConfidence: number; // 0 to 1; 0 means the server default
+}
+
+export const LIFER_VERIFICATION_DEFAULT_MIN_CONFIDENCE = 0.5;
 
 // The shape callers actually get from the `lifeListSettings` derived store: the
 // nullable wire `species` is normalized to an array there, once, so no consumer
 // has to repeat the guard. LifeListSettings itself stays nullable — it describes
 // what the backend sends, not what the UI consumes.
-export type NormalizedLifeListSettings = Omit<LifeListSettings, 'species'> & {
+export type NormalizedLifeListSettings = Omit<LifeListSettings, 'species' | 'verification'> & {
   species: string[];
+  verification: LiferVerificationSettings;
 };
 
 // Extended capture settings
@@ -1455,6 +1467,11 @@ export const lifeListSettings = derived(settingsStore, ($store): NormalizedLifeL
   return {
     enabled: raw?.enabled ?? false,
     species: Array.isArray(species) ? species : [],
+    verification: {
+      enabled: raw?.verification?.enabled ?? false,
+      model: raw?.verification?.model ?? '',
+      minConfidence: raw?.verification?.minConfidence ?? 0,
+    },
   };
 });
 

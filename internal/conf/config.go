@@ -1004,6 +1004,23 @@ type SpeciesTrackingSettings struct {
 type LifeListSettings struct {
 	Enabled bool     `yaml:"enabled" json:"enabled"` // true to enable lifer notifications
 	Species []string `yaml:"species" json:"species"` // Life list entries, "Scientific name_Common name" format (same convention as SpeciesSettings.Include)
+
+	Verification LiferVerificationSettings `yaml:"verification" json:"verification"` // Re-analysis of a lifer's audio by a second model before alerting
+}
+
+// LiferVerificationSettings configures the second-model check a lifer must pass
+// before its notification is sent. The detection's audio is re-read from the
+// capture buffer and scored by Model; the lifer alert fires only when that model
+// also reports the species at MinConfidence or above. A rejected lifer is still
+// saved and published as an ordinary detection. The model must be enabled under
+// models.enabled to be loaded, but it need not be listed on any audio source, so
+// it costs inference only when a lifer is checked. When the check cannot run
+// (model not loaded, audio no longer buffered, timeout) the alert is sent
+// unverified rather than dropped, so a real lifer is never lost to a fault.
+type LiferVerificationSettings struct {
+	Enabled       bool    `yaml:"enabled" json:"enabled"`             // true to re-analyse lifers with a second model before alerting
+	Model         string  `yaml:"model" json:"model"`                 // config model ID of the verifying model, e.g. "perch_v2"; must differ from the detecting model
+	MinConfidence float64 `yaml:"minconfidence" json:"minConfidence"` // lowest verifier confidence, 0 to 1, that confirms the lifer; 0 uses DefaultLiferVerificationMinConfidence
 }
 
 // YearlyTrackingSettings contains settings for tracking first arrivals each year
